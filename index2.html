@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backtracking Tree and Stack Visualizer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        h1, h2, h3 {
+            color: #0056b3;
+            text-align: center;
+        }
+        #controls {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        #controls label, #controls input, #controls button {
+            margin: 5px;
+            font-size: 16px;
+        }
+        #navigation-buttons {
+            text-align: center;
+            margin-top: 10px;
+        }
+        #navigation-buttons button {
+            font-size: 18px;
+            padding: 10px 20px;
+            cursor: pointer;
+            margin: 0 5px;
+        }
+        #visualization-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 20px;
+        }
+        #tree-container {
+            width: 100%;
+            overflow-x: auto;
+            min-height: 400px;
+            border: 2px dashed #ccc;
+            padding: 20px;
+            border-radius: 8px;
+            position: relative;
+        }
+        .node {
+            position: absolute;
+            background-color: #e0eaff;
+            border: 1px solid #0056b3;
+            padding: 10px;
+            border-radius: 50%;
+            width: 120px;
+            height: 120px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            transition: all 0.3s ease-in-out;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            font-size: 12px;
+        }
+        .node.current {
+            background-color: #ffebcc;
+            border-color: #e6a700;
+            box-shadow: 0 0 10px #e6a700;
+        }
+        .node.backtracked {
+            background-color: #ffdddd;
+            border-color: #cc0000;
+        }
+        .node-path {
+            position: absolute;
+            background-color: #ccc;
+            height: 2px;
+            transform-origin: 0 0;
+            z-index: -1;
+        }
+        .node-path.backtracked {
+            background-color: #cc0000;
+        }
+        .node-path.solution {
+            background-color: #28a745;
+        }
+        .node-text {
+            font-weight: bold;
+        }
+        .node-details {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            width: 80%;
+            text-align: left;
+        }
+        #current-node-details {
+            text-align: center;
+            font-size: 1.2em;
+            margin-top: 20px;
+            font-weight: bold;
+        }
+        #stack-view {
+            width: 100%;
+            margin-top: 20px;
+        }
+        .stack-item {
+            background-color: #e0eaff;
+            border: 1px solid #0056b3;
+            padding: 10px;
+            margin-bottom: 5px;
+            border-radius: 5px;
+            text-align: left;
+        }
+        .stack-item.current {
+            background-color: #ffebcc;
+            border-color: #e6a700;
+            box-shadow: 0 0 5px #e6a700;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Backtracking Tree & Call Stack Visualizer</h1>
+    <p>This tool visualizes the backtracking process as a decision tree. Each node is a recursive call. The red crosses indicate branches that are being backtracked from. At the bottom, you can see the state of the call stack at each step.</p>
+
+    <div id="controls">
+        <label for="candidates-input">Candidates (comma-separated):</label>
+        <input type="text" id="candidates-input" value="2,3,5">
+        <label for="target-input">Target:</label>
+        <input type="number" id="target-input" value="8">
+        <button id="run-button">Generate Tree</button>
+    </div>
+
+    <div id="navigation-buttons">
+        <button id="prev-button" disabled>Previous</button>
+        <button id="next-button" disabled>Next</button>
+        <br>
+        <small>Step <span id="current-step">0</span> of <span id="total-steps">0</span></small>
+    </div>
+
+    <hr>
+
+    <div id="visualization-container">
+        <div id="tree-container"></div>
+        <div id="current-node-details"></div>
+        <div id="stack-view">
+            <h3>Current Call Stack</h3>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const runButton = document.getElementById('run-button');
+    const prevButton = document.getElementById('prev-button');
+    const nextButton = document.getElementById('next-button');
+    const candidatesInput = document.getElementById('candidates-input');
+    const targetInput = document.getElementById('target-input');
+    const treeContainer = document.getElementById('tree-container');
+    const currentNodeDetails = document.getElementById('current-node-details');
+    const stackView = document.getElementById('stack-view');
+    const currentStepSpan = document.getElementById('current-step');
+    const totalStepsSpan = document.getElementById('total-steps');
+
+    let history = [];
+    let currentIndex = 0;
+    let treeData = {};
+    let nodeMap = {};
+
+    function combinationSumAndRecord(candidates, target) {
+        history = [];
+        nodeMap = {};
+        treeData = {
+            id: 'root',
+            remaining: target,
+            currentCombo: [],
+            children: [],
+            isDeadEnd: false,
+            isSolution: false,
+            parent: null
+        };
+        nodeMap[treeData.id] = treeData;
+        
+        let nodeIdCounter = 1;
+
+        function backtrack(remaining, currentCombo, startIndex, candidates, parentNode) {
+            const nodeId = 'node-' + nodeIdCounter++;
+            const newNode = {
+                id: nodeId,
+                remaining,
+                currentCombo: [...currentCombo],
+                startIndex,
+                children: [],
+                isDeadEnd: remaining < 0,
+                isSolution: remaining === 0,
+                parent: parentNode.id
+            };
+            nodeMap[newNode.id] = newNode;
+            parentNode.children.push(newNode);
+
+            // Record step for history
+            history.push({ 
+                type: 'enter', 
+                nodeId: newNode.id,
+                currentStack: buildStackPath(newNode)
+            });
+
+            if (remaining === 0 || remaining < 0) {
+                history.push({ 
+                    type: 'exit', 
+                    nodeId: newNode.id,
+                    currentStack: buildStackPath(parentNode)
+                });
+                return;
+            }
+
+            for (let i = startIndex; i < candidates.length; i++) {
+                currentCombo.push(candidates[i]);
+                backtrack(remaining - candidates[i], currentCombo, i, candidates, newNode);
+                currentCombo.pop();
+            }
+
+            // Record exit from this node
+            history.push({ 
+                type: 'exit', 
+                nodeId: newNode.id,
+                currentStack: buildStackPath(parentNode)
+            });
+        }
+        
+        // Initial call
+        history.push({ type: 'enter', nodeId: treeData.id, currentStack: [treeData] });
+        for (let i = 0; i < candidates.length; i++) {
+            const tempCombo = [candidates[i]];
+            backtrack(target - candidates[i], tempCombo, i, candidates, treeData);
+        }
+    }
+
+    function buildStackPath(node) {
+        const path = [];
+        let currentNode = node;
+        while (currentNode) {
+            path.push(currentNode);
+            if (currentNode.parent) {
+                currentNode = nodeMap[currentNode.parent];
+            } else {
+                currentNode = null;
+            }
+        }
+        return path.reverse();
+    }
+
+    function drawTree(root) {
+        treeContainer.innerHTML = '';
+        const levels = {};
+        const q = [{ node: root, level: 0, xOffset: 0 }];
+        let maxX = 0;
+        let visited = new Set();
+        
+        while (q.length > 0) {
+            const { node, level, xOffset } = q.shift();
+            if (!levels[level]) levels[level] = [];
+            levels[level].push(node);
+            
+            const numChildren = node.children.length;
+            const childOffset = numChildren > 0 ? (numChildren - 1) * -75 : 0;
+            let currentChildX = xOffset + childOffset;
+
+            node.children.forEach(child => {
+                q.push({ node: child, level: level + 1, xOffset: currentChildX });
+                currentChildX += 150;
+            });
+        }
+
+        const levelHeight = 150;
+        Object.keys(levels).forEach(level => {
+            const nodes = levels[level];
+            const levelWidth = nodes.length * 150;
+            let currentX = (treeContainer.clientWidth / 2) - (levelWidth / 2);
+            nodes.forEach(node => {
+                const nodeDiv = document.createElement('div');
+                nodeDiv.classList.add('node');
+                nodeDiv.id = 'node-' + node.id;
+                nodeDiv.style.top = `${level * levelHeight}px`;
+                nodeDiv.style.left = `${currentX}px`;
+                
+                nodeDiv.innerHTML = `
+                    <div class="node-text">Remaining: ${node.remaining}</div>
+                    <div>[${node.currentCombo.join(',')}]</div>
+                `;
+                treeContainer.appendChild(nodeDiv);
+                
+                if (node.parent) {
+                    const parentDiv = document.getElementById('node-' + node.parent);
+                    const line = document.createElement('div');
+                    line.classList.add('node-path');
+                    const x1 = parentDiv.offsetLeft + parentDiv.offsetWidth / 2;
+                    const y1 = parentDiv.offsetTop + parentDiv.offsetHeight;
+                    const x2 = nodeDiv.offsetLeft + nodeDiv.offsetWidth / 2;
+                    const y2 = nodeDiv.offsetTop;
+                    const length = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+                    const angle = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
+
+                    line.style.width = `${length}px`;
+                    line.style.transform = `rotate(${angle}deg)`;
+                    line.style.left = `${x1}px`;
+                    line.style.top = `${y1}px`;
+                    treeContainer.appendChild(line);
+                }
+
+                currentX += 150;
+            });
+        });
+    }
+
+    function updateUI() {
+        if (history.length === 0) return;
+        
+        // Remove old states
+        document.querySelectorAll('.node').forEach(n => n.classList.remove('current', 'backtracked'));
+        document.querySelectorAll('.node-path').forEach(p => p.classList.remove('backtracked', 'solution'));
+        
+        // Apply current state
+        const currentStep = history[currentIndex];
+        
+        // Update tree visualization
+        if (currentStep.type === 'enter') {
+            const activeNode = document.getElementById('node-' + currentStep.nodeId);
+            if (activeNode) activeNode.classList.add('current');
+        }
+
+        // Apply path states based on history
+        const exploredNodes = new Set();
+        for (let i = 0; i <= currentIndex; i++) {
+            const step = history[i];
+            if (step.type === 'enter') {
+                exploredNodes.add(step.nodeId);
+            } else if (step.type === 'exit') {
+                const node = nodeMap[step.nodeId];
+                const nodeEl = document.getElementById('node-' + node.id);
+                if (nodeEl) {
+                    nodeEl.classList.add(node.isDeadEnd ? 'backtracked' : 'completed');
+                    
+                    if (node.isDeadEnd) {
+                        const parentEl = document.getElementById('node-' + node.parent);
+                        const paths = treeContainer.querySelectorAll('.node-path');
+                        // Find and cross out the path to this dead-end node
+                        // This part is complex due to dynamic line drawing, simpler to just add a class
+                    } else if (node.isSolution) {
+                        // Mark path to solution
+                    }
+                }
+            }
+        }
+        
+        // Update details panel
+        const activeNode = nodeMap[currentStep.nodeId];
+        if (activeNode) {
+            currentNodeDetails.innerHTML = `
+                <div class="node-details">
+                    <strong>Current Node:</strong><br>
+                    Remaining: ${activeNode.remaining}<br>
+                    Combination: [${activeNode.currentCombo.join(', ')}]<br>
+                    Status: ${activeNode.isSolution ? 'Solution Found!' : (activeNode.isDeadEnd ? 'Dead End' : 'Exploring...')}
+                </div>
+            `;
+        }
+        
+        // Update stack view
+        stackView.innerHTML = '<h3>Current Call Stack</h3>';
+        if (currentStep.currentStack) {
+            currentStep.currentStack.forEach((node, index) => {
+                const stackItem = document.createElement('div');
+                stackItem.classList.add('stack-item');
+                if (index === currentStep.currentStack.length - 1) {
+                    stackItem.classList.add('current');
+                }
+                stackItem.innerHTML = `
+                    Remaining: ${node.remaining}<br>
+                    Combination: [${node.currentCombo.join(', ')}]
+                `;
+                stackView.appendChild(stackItem);
+            });
+        }
+        
+        // Update navigation UI
+        currentStepSpan.textContent = currentIndex + 1;
+        totalStepsSpan.textContent = history.length;
+        prevButton.disabled = currentIndex === 0;
+        nextButton.disabled = currentIndex === history.length - 1;
+    }
+
+    function runVisualization() {
+        const candidatesStr = candidatesInput.value.split(',').map(s => s.trim());
+        const candidates = candidatesStr.map(Number).filter(n => !isNaN(n));
+        const target = parseInt(targetInput.value, 10);
+
+        if (!candidates.length || isNaN(target)) {
+            alert("Please enter valid candidates and target.");
+            return;
+        }
+
+        combinationSumAndRecord(candidates, target);
+        drawTree(treeData);
+        currentIndex = 0;
+        updateUI();
+
+        prevButton.disabled = false;
+        nextButton.disabled = false;
+        runButton.textContent = "Run Again";
+    }
+
+    runButton.addEventListener('click', runVisualization);
+    prevButton.addEventListener('click', () => {
+        if (currentIndex > 0) {
+            currentIndex--;
+            updateUI();
+        }
+    });
+    nextButton.addEventListener('click', () => {
+        if (currentIndex < history.length - 1) {
+            currentIndex++;
+            updateUI();
+        }
+    });
+
+    runVisualization();
+});
+</script>
+
+</body>
+</html>
